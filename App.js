@@ -1,7 +1,7 @@
 // @refresh reset
 import { StatusBar } from 'expo-status-bar';
-import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, TextInput, Button, View } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import { StyleSheet, Text, TextInput, Button, View, LogBox } from 'react-native';
 import * as firebase from 'firebase'
 import 'firebase/firestore'
 import AsyncStorage from '@react-native-community/async-storage'
@@ -22,13 +22,15 @@ if (firebase.apps.length === 0) {
   firebase.initializeApp(firebaseConfig);
 }
 
+LogBox.ignoreLogs(["Setting a timer for a long period of time"]);
+
 const database = firebase.firestore()
 const chat = database.collection('chat')
 
 export default function App() {
   const [user, setUser] = useState(null)
   const [name, setName] = useState('')
-  const [message, setMessage] = useState([])
+  const [messages, setMessages] = useState([])
   
   useEffect(() => {
     readUser()
@@ -40,10 +42,14 @@ export default function App() {
                               const message = doc.data()
                               return { ...message, createdAt: message.createdAt.toDate()}
                             })
-                            .sort((a, b) => b.createdAt.getItem() - a.createdAt.getItem())
-      setMessage(allMessages)
+                            .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      addMessages(allMessages)
     })
   }, [])
+
+  const addMessages = useCallback((newMessages) => {
+    setMessages((oldMessages) => GiftedChat.append(oldMessages, newMessages))
+  }, [messages])
 
   async function readUser() {
     const user = await AsyncStorage.getItem('user')
@@ -57,6 +63,11 @@ export default function App() {
     const user = { _id, name }
     await AsyncStorage.setItem('user', JSON.stringify(user))
     setUser(user)
+  }
+
+  async function sent(messages) {
+    const newMessages = messages.map(m => chat.add(m))
+    await Promise.all(newMessages)
   }
 
   if (!user) {
@@ -77,10 +88,11 @@ export default function App() {
   }
 
   return (
-    <View style={styles.container}>
-      <Text>User</Text>
-      <StatusBar style="auto" />
-    </View>
+    <GiftedChat 
+      messages={messages} 
+      user={user} 
+      onSend={sent}
+    />
   );
 }
 
